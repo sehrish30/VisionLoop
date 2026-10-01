@@ -1,0 +1,17 @@
+{
+  "name": "visionloop",
+  "private": true,
+  "workspaces": ["apps/web"],
+  "scripts": {
+    "dev": "concurrently -k -n web,api,worker \"npm run dev:web\" \"npm run dev:api\" \"npm run dev:worker\"",
+    "dev:web": "npm run dev -w apps/web",
+    "dev:api": "cd services/api && .venv/bin/python -m uvicorn visionloop.api:app --host 127.0.0.1 --port 8000",
+    "dev:worker": "cd services/api && .venv/bin/python -m visionloop.worker",
+    "build": "npm run build -w apps/web",
+    "typecheck": "npm run typecheck -w apps/web",
+    "test:api": "cd services/api && .venv/bin/python -m pytest",
+    "data:import": "cd services/api && .venv/bin/python -m visionloop.import_dataset",
+    "mlflow": "cd services/api && .venv/bin/mlflow server --host 127.0.0.1 --port 5001 --backend-store-uri sqlite:///../../data/mlflow.db --default-artifact-root ../../data/mlflow-artifacts"
+  },
+  "devDependencies": {"concurrently": "^9.2.1"}
+}
