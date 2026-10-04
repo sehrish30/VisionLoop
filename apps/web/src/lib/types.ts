@@ -1,6 +1,7 @@
 export const labels = ["Dress", "T-shirt", "Shirt", "Sweater", "Blouse"] as const;
 export type Label = (typeof labels)[number];
 export type View = "classify" | "review" | "training" | "models";
+export type Trainer = "baseline" | "vit";
 export interface Metrics {
   accuracy: number; macro_f1: number; samples: number; training_samples?: number;
   confusion_matrix: number[][]; labels: string[]; gate_passed?: boolean;
@@ -18,6 +19,7 @@ export interface Garment {
 export interface Prediction { label: string; model_id: string; scores: { label: string; score: number }[] }
 export interface Classification { image: Garment; prediction: Prediction | null }
 export interface TrainingRun {
+  trainer: Trainer;
   id: string; status: "queued" | "running" | "completed" | "failed"; step: string;
   progress: number; error: string | null; metrics: Metrics | null; baseline_metrics: Metrics | null;
   created_at: string; finished_at: string | null;

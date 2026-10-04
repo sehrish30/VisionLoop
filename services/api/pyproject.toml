@@ -12,6 +12,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+vit = ["torch>=2.6,<3", "torchvision>=0.21,<1", "timm>=1.0.15,<1.1"]
 dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
 tracking = ["mlflow-skinny>=3,<4"]
 mlflow-ui = ["mlflow>=3,<4"]

@@ -1,7 +1,7 @@
 """A deliberately small CPU baseline; scores are not calibrated confidence.
 
-Replace features/model construction with a pretrained ViT to follow the course.
-Training and inference always share this exact image transformation.
+Supports both the original baseline and optional frozen pretrained ViT features.
+Training and inference share the transformation saved with each model.
 """
 import numpy as np
 from PIL import Image, ImageOps
@@ -11,6 +11,11 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 
 from .store import LABELS
+
+ALGORITHMS = {
+    "baseline": "CPU baseline · image features + logistic regression",
+    "vit": "Vision Transformer · frozen DeiT-Tiny + logistic regression",
+}
 
 
 def features(path):
@@ -25,14 +30,27 @@ def features(path):
     return np.concatenate([gray.flatten(), horizontal.mean(axis=0), vertical.mean(axis=1), *histograms])
 
 
-def fit_model(paths, labels):
+def fit_model(paths, labels, trainer="baseline"):
+    if trainer == "vit":
+        from .vit import fit
+        return fit(paths, labels)
+    if trainer != "baseline":
+        raise ValueError(f"Unknown trainer: {trainer}")
     model = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000, C=0.1, random_state=42))
     model.fit(np.stack([features(p) for p in paths]), labels)
     return model
 
 
+def model_inputs(model, paths):
+    from .vit import VisionTransformerModel
+    if isinstance(model, VisionTransformerModel):
+        return model.head, model.features(paths)
+    return model, np.stack([features(p) for p in paths])
+
+
 def evaluate(model, paths, labels):
-    predicted = model.predict(np.stack([features(p) for p in paths]))
+    classifier, inputs = model_inputs(model, paths)
+    predicted = classifier.predict(inputs)
     return {
         "accuracy": float(accuracy_score(labels, predicted)),
         "macro_f1": float(f1_score(labels, predicted, labels=LABELS, average="macro", zero_division=0)),
@@ -42,5 +60,6 @@ def evaluate(model, paths, labels):
 
 
 def predict(model, path):
-    probabilities = model.predict_proba(features(path).reshape(1, -1))[0]
+    classifier, inputs = model_inputs(model, [path])
+    probabilities = classifier.predict_proba(inputs)[0]
     return sorted([{"label": str(label), "score": float(score)} for label, score in zip(model.classes_, probabilities)], key=lambda x: x["score"], reverse=True)

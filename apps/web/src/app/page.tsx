@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Check, CheckCheck, ChevronRight, CircleHelp, Database, FlaskConical, ImagePlus, Layers3, LoaderCircle, RotateCcw, ScanLine, Shirt, Sparkles, Upload, X } from "lucide-react";
-import { api, labels, type Classification, type Garment, type ModelVersion, type Overview, type TrainingRun, type View } from "@/lib/types";
+import { api, labels, type Classification, type Garment, type ModelVersion, type Overview, type Trainer, type TrainingRun, type View } from "@/lib/types";
 
 const navigation = [
   { id: "classify" as View, title: "Classify", icon: ScanLine },
@@ -24,6 +24,7 @@ export default function Studio() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [images, setImages] = useState<Garment[]>([]);
   const [runs, setRuns] = useState<TrainingRun[]>([]);
+  const [trainer, setTrainer] = useState<Trainer>("baseline");
   const [models, setModels] = useState<ModelVersion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -83,7 +84,7 @@ export default function Studio() {
   }
   async function train() {
     setBusy("train"); setError(null);
-    try { await api("/runs", { method: "POST" }); setNotice("Training queued. The local worker will pick it up."); await refresh(); }
+    try { await api("/runs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trainer }) }); setNotice("Training queued. The local worker will pick it up."); await refresh(); }
     catch (e) { setError((e as Error).message); }
     finally { setBusy(null); }
   }
@@ -140,9 +141,18 @@ export default function Studio() {
         </>}
 
         {view === "training" && <>
+          <div className="training-choice">
+            <label htmlFor="trainer">Choose how to train</label>
+            <select id="trainer" value={trainer} onChange={e => setTrainer(e.target.value as Trainer)} disabled={!!busy || queued}>
+              <option value="baseline">Lightweight baseline</option>
+              <option value="vit">Pretrained Vision Transformer</option>
+            </select>
+            <p>{trainer === "vit" ? "Reuses a pretrained transformer's visual features and trains a new clothing classifier. The transformer stays frozen. The first run downloads model weights; training and predictions run on this computer." : "Trains a new classifier from scratch using simple image features. A quick starting point for comparing experiments."}</p>
+            <p>Each run creates a separate version from your labeled images. A higher score is not guaranteed. Your active model stays in use until you activate a passing candidate.</p>
+          </div>
           <div className="training-overview"><div><Database size={22} /><span><strong>{overview?.split_counts.train ?? 0}</strong> Training images</span></div><div><CheckCheck size={22} /><span><strong>{overview?.split_counts.validation ?? 0}</strong> Validation images</span></div><div><Layers3 size={22} /><span><strong>{overview?.split_counts.test ?? 0}</strong> Reserved test images</span></div><div><span className={`status-dot ${workerReady ? "online" : ""}`} /><span>{workerReady ? "Worker ready" : "Worker offline"}<small>One run at a time</small></span></div></div>
           <div className="pipeline-steps">{["Prepare", "Train", "Evaluate", "Compare", "Save"].map((step, index) => <span key={step}><span>{index + 1}</span>{step}{index < 4 && <ChevronRight size={16} />}</span>)}</div>
-          {!runs.length ? <Empty icon={<FlaskConical size={34} />} title="Your first experiment awaits" text="Import a sample of the fashion dataset, then start a local training run. A lightweight CPU baseline keeps the first experiment small." action="View dataset setup" onAction={() => setSetupOpen(true)} /> : <div className="run-list">{runs.map(run => <article className="run-card" key={run.id}><div className="run-header"><div><h2>Run {run.id.slice(0, 6)}</h2><p>{date(run.created_at)}</p></div><span className={`status-tag ${run.status}`}>{run.status}</span></div><div className="run-progress-label"><span>{run.step}</span><span>{run.progress}%</span></div><div className="run-progress"><div style={{ width: `${run.progress}%` }} /></div>{run.error && <p className="run-error">{run.error}</p>}{run.metrics && <div className="run-metrics"><span>Accuracy <strong>{percent(run.metrics.accuracy)}</strong></span><span>Macro F1 <strong>{percent(run.metrics.macro_f1)}</strong></span><span>Validation images <strong>{run.metrics.samples}</strong></span><span>Comparison <strong>{run.metrics.gate_passed ? "Passed" : "Below threshold"}</strong></span><button className="text-button" onClick={() => setView("models")}>View model <ChevronRight size={15} /></button></div>}</article>)}</div>}
+          {!runs.length ? <Empty icon={<FlaskConical size={34} />} title="Your first experiment awaits" text="Import a sample of the fashion dataset, then start a local training run. A lightweight CPU baseline keeps the first experiment small." action="View dataset setup" onAction={() => setSetupOpen(true)} /> : <div className="run-list">{runs.map(run => <article className="run-card" key={run.id}><div className="run-header"><div><h2>Run {run.id.slice(0, 6)}</h2><p>{date(run.created_at)} · {run.trainer === "vit" ? "Vision Transformer" : "Lightweight baseline"}</p></div><span className={`status-tag ${run.status}`}>{run.status}</span></div><div className="run-progress-label"><span>{run.step}</span><span>{run.progress}%</span></div><div className="run-progress"><div style={{ width: `${run.progress}%` }} /></div>{run.error && <p className="run-error">{run.error}</p>}{run.metrics && <div className="run-metrics"><span>Accuracy <strong>{percent(run.metrics.accuracy)}</strong></span><span>Macro F1 <strong>{percent(run.metrics.macro_f1)}</strong></span><span>Validation images <strong>{run.metrics.samples}</strong></span><span>Comparison <strong>{run.metrics.gate_passed ? "Passed" : "Below threshold"}</strong></span><button className="text-button" onClick={() => setView("models")}>View model <ChevronRight size={15} /></button></div>}</article>)}</div>}
           <p className="footnote">First-model threshold: 20% macro F1. Later candidates must improve by at least 1 percentage point on the same validation snapshot. These are learning-demo rules, not a production quality guarantee.</p>
         </>}
 

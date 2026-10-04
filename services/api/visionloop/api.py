@@ -2,6 +2,7 @@ import json
 import uuid
 from collections import Counter
 from contextlib import asynccontextmanager
+from typing import Literal
 
 import joblib
 from fastapi import FastAPI, HTTPException, UploadFile, File
@@ -135,8 +136,13 @@ def runs():
     return result
 
 
+class TrainingInput(BaseModel):
+    trainer: Literal["baseline", "vit"] = "baseline"
+
+
 @app.post("/runs", status_code=202)
-def start_run():
+def start_run(body: TrainingInput | None = None):
+    trainer = body.trainer if body else "baseline"
     with store.connect() as db:
         db.execute("BEGIN IMMEDIATE")
         if db.execute("SELECT id FROM runs WHERE status IN ('queued','running')").fetchone():
@@ -149,7 +155,7 @@ def start_run():
         snapshot = f"snapshots/{run_id}.json"
         payload = [{"id": r["id"], "path": r["path"], "hash": r["hash"], "label": r["reviewed_label"], "split": r["split"]} for r in rows if r["reviewed_label"]]
         (store.DATA / snapshot).write_text(json.dumps(payload, indent=2))
-        db.execute("INSERT INTO runs (id,status,step,created_at,snapshot,baseline_id) VALUES (?,?,?,?,?,?)", (run_id, "queued", "Queued", store.now(), snapshot, store.active_id(db)))
+        db.execute("INSERT INTO runs (id,status,step,created_at,snapshot,baseline_id,trainer) VALUES (?,?,?,?,?,?,?)", (run_id, "queued", "Queued", store.now(), snapshot, store.active_id(db), trainer))
     return {"id": run_id, "status": "queued"}
 
 

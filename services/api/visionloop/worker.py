@@ -36,8 +36,10 @@ def execute(run):
         # The reserved test partition is never used to train or select models.
         paths = lambda subset: [store.DATA / r["path"] for r in subset]
         labels = lambda subset: [r["label"] for r in subset]
-        progress(run_id, "Train classifier", 35)
-        model = ml.fit_model(paths(train), labels(train))
+        trainer = run.get("trainer", "baseline")
+        step = "Load pretrained transformer and train classifier" if trainer == "vit" else "Train classifier"
+        progress(run_id, step, 35)
+        model = ml.fit_model(paths(train), labels(train), trainer)
         progress(run_id, "Evaluate candidate", 65)
         metrics = ml.evaluate(model, paths(validation), labels(validation))
         metrics["training_samples"] = len(train)
@@ -51,14 +53,18 @@ def execute(run):
         eligible = metrics["macro_f1"] >= threshold
         metrics["gate_threshold"] = threshold
         metrics["gate_passed"] = eligible
-        metrics["algorithm"] = "CPU baseline · image features + logistic regression"
+        metrics["algorithm"] = ml.ALGORITHMS[trainer]
+        metrics["trainer"] = trainer
+        if trainer == "vit":
+            metrics["backbone"] = model.backbone_name
+            metrics["backbone_frozen"] = True
         tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
         if tracking_uri:
             import mlflow
             mlflow.set_tracking_uri(tracking_uri)
             mlflow.set_experiment("VisionLoop")
             with mlflow.start_run(run_name=run_id):
-                mlflow.log_params({"classifier": "logistic-regression", "dataset_snapshot": run_id, "C": 0.1})
+                mlflow.log_params({"classifier": "logistic-regression", "trainer": trainer, "dataset_snapshot": run_id, "C": 0.1})
                 mlflow.log_metrics({"accuracy": metrics["accuracy"], "macro_f1": metrics["macro_f1"]})
                 mlflow.log_artifact(str(store.DATA / run["snapshot"]))
         progress(run_id, "Save model", 95)

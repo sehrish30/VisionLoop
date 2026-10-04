@@ -132,6 +132,10 @@ select { background:white; border:1px solid #dce1ea; border-radius:5px; padding:
 .review-card-body p { font-size:11px; color:var(--muted); margin:5px 0 15px; }
 .label-control { display:flex; gap:8px; }
 .icon-button { width:36px; height:36px; display:grid; place-items:center; flex-shrink:0; background:var(--violet-soft); color:var(--violet); border:0; border-radius:5px; }
+.training-choice { padding:20px; margin-bottom:20px; background:white; border:1px solid var(--line); border-radius:10px; }
+.training-choice label { display:block; font-weight:600; margin-bottom:10px; }
+.training-choice select { max-width:100%; padding:10px; border:1px solid var(--line); border-radius:6px; font:inherit; color:var(--ink); background:white; }
+.training-choice p { color:var(--muted); font-size:13px; line-height:1.6; margin:12px 0 0; }
 .training-overview { display:grid; grid-template-columns:repeat(4,1fr); padding:24px; background:white; border:1px solid var(--line); border-radius:10px; gap:22px; }
 .training-overview>div { display:flex; gap:12px; align-items:center; color:#8591a5; }
 .training-overview span { color:var(--muted); font-size:11px; }
