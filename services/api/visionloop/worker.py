@@ -16,10 +16,13 @@ def progress(run_id, step, value):
         db.execute("UPDATE runs SET step=?,progress=?,heartbeat=? WHERE id=?", (step, value, store.now(), run_id))
 
 
-def heartbeat(stop, run_id):
+def heartbeat(stop, run_id, test_report=False):
     while not stop.wait(5):
         with store.connect() as db:
-            db.execute("UPDATE runs SET heartbeat=? WHERE id=?", (store.now(), run_id))
+            if test_report:
+                db.execute("UPDATE test_reports SET heartbeat=? WHERE id=?", (store.now(), run_id))
+            else:
+                db.execute("UPDATE runs SET heartbeat=? WHERE id=?", (store.now(), run_id))
             db.execute("INSERT OR REPLACE INTO settings VALUES ('worker_heartbeat',?)", (store.now(),))
 
 
@@ -83,20 +86,58 @@ def execute(run):
         thread.join(timeout=6)
 
 
+def execute_test_report(report):
+    stop = threading.Event()
+    thread = threading.Thread(target=heartbeat, args=(stop, report["id"], True), daemon=True)
+    thread.start()
+    try:
+        rows = json.loads(report["snapshot"])
+        with store.connect() as db:
+            model = db.execute("SELECT path FROM models WHERE id=?", (report["model_id"],)).fetchone()
+            for row in rows:
+                image = db.execute("SELECT split,hash,label FROM images WHERE id=?", (row["id"],)).fetchone()
+                if not image or image["split"] != "test" or image["hash"] != row["hash"] or image["label"] != row["label"]:
+                    raise ValueError("Reserved test data no longer matches the saved snapshot.")
+        loaded = joblib.load(store.DATA / model["path"])
+        metrics = ml.evaluate(loaded, [store.DATA / r["path"] for r in rows],
+                              [r["label"] for r in rows], include_per_class=True)
+        with store.connect() as db:
+            db.execute("UPDATE test_reports SET status='completed',metrics=?,finished_at=? WHERE id=?",
+                       (json.dumps(metrics), store.now(), report["id"]))
+    except Exception as exc:
+        logging.exception("Test report %s failed", report["id"])
+        with store.connect() as db:
+            db.execute("UPDATE test_reports SET status='failed',error=?,finished_at=? WHERE id=?",
+                       (str(exc), store.now(), report["id"]))
+    finally:
+        stop.set()
+        thread.join(timeout=6)
+
+
 def tick():
     with store.connect() as db:
         db.execute("BEGIN IMMEDIATE")
         db.execute("INSERT OR REPLACE INTO settings VALUES ('worker_heartbeat',?)", (store.now(),))
         cutoff = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
         db.execute("UPDATE runs SET status='failed',step='Interrupted',error='Worker stopped before completion. Start a new run.',finished_at=? WHERE status='running' AND heartbeat < ?", (store.now(), cutoff))
-        if db.execute("SELECT 1 FROM runs WHERE status='running'").fetchone():
+        db.execute("UPDATE test_reports SET status='failed',error='Worker stopped before completion. Retry the report.',finished_at=? WHERE status='running' AND heartbeat < ?", (store.now(), cutoff))
+        if db.execute("SELECT 1 FROM runs WHERE status='running'").fetchone() or db.execute("SELECT 1 FROM test_reports WHERE status='running'").fetchone():
             return False
         row = db.execute("SELECT * FROM runs WHERE status='queued' ORDER BY created_at LIMIT 1").fetchone()
+        is_report = row is None
+        if is_report:
+            row = db.execute("SELECT * FROM test_reports WHERE status='queued' ORDER BY created_at LIMIT 1").fetchone()
         if not row:
             return False
         run = dict(row)
-        db.execute("UPDATE runs SET status='running',heartbeat=? WHERE id=?", (store.now(), run["id"]))
-    execute(run)
+        if is_report:
+            db.execute("UPDATE test_reports SET status='running',heartbeat=? WHERE id=?", (store.now(), run["id"]))
+        else:
+            db.execute("UPDATE runs SET status='running',heartbeat=? WHERE id=?", (store.now(), run["id"]))
+    if is_report:
+        execute_test_report(run)
+    else:
+        execute(run)
     return True
 
 

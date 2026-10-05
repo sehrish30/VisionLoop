@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { TestReportPanel } from "./test-report-panel";
 import { ArrowUpRight, Check, CheckCheck, ChevronRight, CircleHelp, Database, FlaskConical, ImagePlus, Layers3, LoaderCircle, RotateCcw, ScanLine, Shirt, Sparkles, Upload, X } from "lucide-react";
 import { api, labels, type Classification, type Garment, type ModelVersion, type Overview, type Trainer, type TrainingRun, type View } from "@/lib/types";
 
@@ -94,6 +95,15 @@ export default function Studio() {
     catch (e) { setError((e as Error).message); }
     finally { setBusy(null); }
   }
+  async function requestTestReport(id: string) {
+    setBusy(id); setError(null);
+    try {
+      await api(`/models/${id}/test-report`, { method: "POST" });
+      setNotice("Final test report queued. The local worker will evaluate the saved model.");
+      await refresh();
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(null); }
+  }
 
   const queued = runs.some(r => r.status === "running" || r.status === "queued");
   const shownImages = images.filter(i => i.split === "train" && (reviewFilter === "all" || !i.reviewed_label));
@@ -167,7 +177,7 @@ export default function Studio() {
         </>}
 
         {view === "models" && <>
-          {!models.length ? <Empty icon={<Layers3 size={34} />} title="A home for every model version" text="Completed runs appear here with real evaluation results. Activate a passing candidate when you are ready to use it." action="Go to training" onAction={() => setView("training")} /> : <div className="model-list">{models.map(model => <article className={`model-card ${model.active ? "is-active" : ""}`} key={model.id}><div className="run-header"><div><div className="model-name"><h2>{model.id}</h2>{model.active && <span className="status-tag completed">Active</span>}</div><p>{model.metrics.algorithm}</p></div><button className={model.active ? "secondary" : "primary"} disabled={model.active || !model.can_activate || !!busy} onClick={() => void activate(model.id)}>{model.active ? <Check size={16} /> : model.previously_active ? <RotateCcw size={16} /> : <Sparkles size={16} />}{model.active ? "In use" : model.previously_active ? "Restore version" : "Activate model"}</button></div><div className="model-metrics"><div><span>Accuracy</span><strong>{percent(model.metrics.accuracy)}</strong></div><div><span>Macro F1</span><strong>{percent(model.metrics.macro_f1)}</strong></div><div><span>Training images</span><strong>{model.metrics.training_samples}</strong></div><div><span>Quality gate</span><strong className="gate-value">{model.eligible ? "Passed" : "Not passed"}</strong></div></div><details><summary>Inspect confusion matrix</summary><p className="muted">Rows are actual labels; columns are predictions. Larger diagonal values are better.</p><div className="table-scroll"><table><thead><tr><th>Actual / predicted</th>{model.metrics.labels.map(l => <th key={l}>{l}</th>)}</tr></thead><tbody>{model.metrics.confusion_matrix.map((row, i) => <tr key={i}><th>{model.metrics.labels[i]}</th>{row.map((n, j) => <td className={i === j ? "diagonal" : ""} key={j}>{n}</td>)}</tr>)}</tbody></table></div></details></article>)}</div>}
+          {!models.length ? <Empty icon={<Layers3 size={34} />} title="A home for every model version" text="Completed runs appear here with real evaluation results. Activate a passing candidate when you are ready to use it." action="Go to training" onAction={() => setView("training")} /> : <div className="model-list">{models.map(model => <article className={`model-card ${model.active ? "is-active" : ""}`} key={model.id}><div className="run-header"><div><div className="model-name"><h2>{model.id}</h2>{model.active && <span className="status-tag completed">Active</span>}</div><p>{model.metrics.algorithm}</p></div><button className={model.active ? "secondary" : "primary"} disabled={model.active || !model.can_activate || !!busy} onClick={() => void activate(model.id)}>{model.active ? <Check size={16} /> : model.previously_active ? <RotateCcw size={16} /> : <Sparkles size={16} />}{model.active ? "In use" : model.previously_active ? "Restore version" : "Activate model"}</button></div><div className="model-metrics"><div><span>Validation accuracy</span><strong>{percent(model.metrics.accuracy)}</strong></div><div><span>Validation macro F1</span><strong>{percent(model.metrics.macro_f1)}</strong></div><div><span>Training images</span><strong>{model.metrics.training_samples}</strong></div><div><span>Quality gate</span><strong className="gate-value">{model.eligible ? "Passed" : "Not passed"}</strong></div></div><details><summary>Inspect validation confusion matrix</summary><p className="muted">Rows are actual labels; columns are predictions. Larger diagonal values are better.</p><div className="table-scroll"><table><thead><tr><th>Actual / predicted</th>{model.metrics.labels.map(l => <th key={l}>{l}</th>)}</tr></thead><tbody>{model.metrics.confusion_matrix.map((row, i) => <tr key={i}><th>{model.metrics.labels[i]}</th>{row.map((n, j) => <td className={i === j ? "diagonal" : ""} key={j}>{n}</td>)}</tr>)}</tbody></table></div></details><TestReportPanel model={model} busy={!!busy} onRequest={id => void requestTestReport(id)} /></article>)}</div>}
         </>}
         <footer className="page-footer"><span>Built to learn. Designed to improve.</span><span>Fashion dataset by fnauman · CC BY 4.0</span></footer>
       </main>

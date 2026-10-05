@@ -8,7 +8,7 @@ from PIL import Image, ImageOps
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, precision_recall_fscore_support
 
 from .store import LABELS
 
@@ -48,15 +48,22 @@ def model_inputs(model, paths):
     return model, np.stack([features(p) for p in paths])
 
 
-def evaluate(model, paths, labels):
+def evaluate(model, paths, labels, include_per_class=False):
     classifier, inputs = model_inputs(model, paths)
     predicted = classifier.predict(inputs)
-    return {
+    metrics = {
         "accuracy": float(accuracy_score(labels, predicted)),
         "macro_f1": float(f1_score(labels, predicted, labels=LABELS, average="macro", zero_division=0)),
         "confusion_matrix": confusion_matrix(labels, predicted, labels=LABELS).tolist(),
         "labels": LABELS, "samples": len(labels),
     }
+    if include_per_class:
+        precision, recall, f1, support = precision_recall_fscore_support(
+            labels, predicted, labels=LABELS, zero_division=0)
+        metrics["per_class"] = [{"label": label, "precision": float(precision[i]),
+                                 "recall": float(recall[i]), "f1": float(f1[i]),
+                                 "samples": int(support[i])} for i, label in enumerate(LABELS)]
+    return metrics
 
 
 def predict(model, path):

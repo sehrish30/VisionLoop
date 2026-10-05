@@ -69,6 +69,11 @@ def test_vit_roundtrip_and_comparison(client, monkeypatch):
     content = path.read_bytes()
     result = client.post("/classify", files={"file": ("test.jpg", content, "image/jpeg")})
     assert result.json()["prediction"]["model_id"] == candidate["id"]
+    assert client.post(f"/models/{candidate['id']}/test-report").status_code == 202
+    worker.tick()
+    report = client.get(f"/models/{candidate['id']}/test-report")
+    assert report.status_code == 200
+    assert report.json()["metrics"]["samples"] == 5
     assert client.post(f"/models/{baseline['id']}/activate").status_code == 200
 
 

@@ -6,6 +6,7 @@ export interface Metrics {
   accuracy: number; macro_f1: number; samples: number; training_samples?: number;
   confusion_matrix: number[][]; labels: string[]; gate_passed?: boolean;
   gate_threshold?: number; algorithm?: string;
+  per_class?: { label: string; precision: number; recall: number; f1: number; samples: number }[];
 }
 export interface Overview {
   class_splits?: Record<string, { train: number; validation: number; test: number }>;
@@ -28,6 +29,11 @@ export interface TrainingRun {
 export interface ModelVersion {
   id: string; run_id: string; metrics: Metrics; eligible: boolean; created_at: string;
   active: boolean; previously_active: boolean; can_activate: boolean;
+  test_report?: TestReport | null;
+}
+export interface TestReport {
+  id: string; model_id: string; status: "queued" | "running" | "completed" | "failed";
+  metrics: Metrics | null; error: string | null; created_at: string; finished_at: string | null;
 }
 
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {

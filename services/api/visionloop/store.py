@@ -63,6 +63,11 @@ def init():
             created_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS test_reports (
+            id TEXT PRIMARY KEY, model_id TEXT UNIQUE NOT NULL REFERENCES models(id),
+            status TEXT NOT NULL, snapshot TEXT NOT NULL, metrics TEXT, error TEXT,
+            created_at TEXT NOT NULL, finished_at TEXT, heartbeat TEXT
+        );
         CREATE TABLE IF NOT EXISTS activations (
             id INTEGER PRIMARY KEY AUTOINCREMENT, model_id TEXT NOT NULL,
             previous_id TEXT, created_at TEXT NOT NULL

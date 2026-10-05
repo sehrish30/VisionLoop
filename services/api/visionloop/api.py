@@ -6,7 +6,7 @@ from typing import Literal
 
 import joblib
 from fastapi import FastAPI, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
@@ -167,12 +167,58 @@ def models():
         current = store.active_id(db)
         result = [dict(r) for r in db.execute("SELECT m.*,r.baseline_id FROM models m JOIN runs r ON m.run_id=r.id ORDER BY m.created_at DESC")]
         activated = {r[0] for r in db.execute("SELECT model_id FROM activations")}
+        reports = {r["model_id"]: dict(r) for r in db.execute("SELECT id,model_id,status,metrics,error,created_at,finished_at FROM test_reports")}
     for m in result:
         m["metrics"] = json.loads(m["metrics"])
+        m["test_report"] = reports.get(m["id"])
+        if m["test_report"]:
+            m["test_report"]["metrics"] = json.loads(m["test_report"]["metrics"]) if m["test_report"]["metrics"] else None
         m["active"] = m["id"] == current
         m["previously_active"] = m["id"] in activated
         m["can_activate"] = not m["active"] and (m["id"] in activated or (bool(m["eligible"]) and current == m["baseline_id"]))
     return result
+
+
+@app.post("/models/{model_id}/test-report", status_code=202)
+def start_test_report(model_id: str):
+    with store.connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        model = db.execute("SELECT m.id,r.snapshot FROM models m JOIN runs r ON r.id=m.run_id WHERE m.id=?", (model_id,)).fetchone()
+        if not model:
+            raise HTTPException(404, "Model not found.")
+        existing = db.execute("SELECT * FROM test_reports WHERE model_id=?", (model_id,)).fetchone()
+        if existing and existing["status"] != "failed":
+            return {"id": existing["id"], "status": existing["status"]}
+        if store.active_id(db) != model_id:
+            raise HTTPException(409, "Activate your chosen model before requesting its final test report.")
+        if existing:
+            # Retry the same frozen snapshot after an operational failure.
+            db.execute("UPDATE test_reports SET status='queued',error=NULL,finished_at=NULL,heartbeat=NULL WHERE id=?", (existing["id"],))
+            return {"id": existing["id"], "status": "queued"}
+        rows = json.loads((store.DATA / model["snapshot"]).read_text())
+        test = [r for r in rows if r["split"] == "test"]
+        if set(r["label"] for r in test) != set(store.LABELS):
+            raise HTTPException(409, "This model's training snapshot needs reserved test images for every class. Train a new model after importing more data.")
+        report_id = uuid.uuid4().hex[:12]
+        db.execute("INSERT INTO test_reports (id,model_id,status,snapshot,created_at) VALUES (?,?,?,?,?)",
+                   (report_id, model_id, "queued", json.dumps(test), store.now()))
+    return {"id": report_id, "status": "queued"}
+
+
+@app.get("/models/{model_id}/test-report")
+def download_test_report(model_id: str):
+    with store.connect() as db:
+        row = db.execute("SELECT * FROM test_reports WHERE model_id=?", (model_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "No test report exists for this model.")
+    if row["status"] != "completed":
+        raise HTTPException(409, "The test report is not complete yet.")
+    report = dict(row)
+    report["snapshot"] = json.loads(report["snapshot"])
+    report["metrics"] = json.loads(report["metrics"])
+    report["purpose"] = "Final held-out evaluation. Not used for training, model selection, or activation."
+    return Response(json.dumps(report, indent=2), media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="test-report-{row["id"]}.json"'})
 
 
 @app.post("/models/{model_id}/activate")
