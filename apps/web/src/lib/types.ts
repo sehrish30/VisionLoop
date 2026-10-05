@@ -8,6 +8,7 @@ export interface Metrics {
   gate_threshold?: number; algorithm?: string;
 }
 export interface Overview {
+  class_splits?: Record<string, { train: number; validation: number; test: number }>;
   labels: string[]; dataset: string; images: number; reviewed: number; pending: number;
   class_counts: Record<string, number>; split_counts: Record<string, number>; runs: number;
   active_model: { id: string; metrics: Metrics } | null; worker_heartbeat: string | null;

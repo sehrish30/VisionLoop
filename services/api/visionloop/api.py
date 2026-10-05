@@ -59,12 +59,14 @@ def overview():
         images = image_rows(db)
         current = store.active_id(db)
         model = db.execute("SELECT * FROM models WHERE id=?", (current,)).fetchone()
+        coverage = Counter((i["reviewed_label"], i["split"]) for i in images if i["reviewed_label"])
         return {
             "labels": store.LABELS, "dataset": store.DATASET,
             "images": len(images), "reviewed": sum(bool(i["reviewed_label"]) for i in images),
             "pending": sum(not i["reviewed_label"] for i in images),
             "class_counts": dict(Counter(i["reviewed_label"] for i in images if i["reviewed_label"])),
             "split_counts": dict(Counter(i["split"] for i in images if i["reviewed_label"])),
+            "class_splits": {label: {split: coverage[(label, split)] for split in ("train", "validation", "test")} for label in store.LABELS},
             "runs": db.execute("SELECT COUNT(*) FROM runs").fetchone()[0],
             "active_model": {"id": current, "metrics": json.loads(model["metrics"])} if model else None,
             "worker_heartbeat": (db.execute("SELECT value FROM settings WHERE key='worker_heartbeat'").fetchone() or [None])[0],
