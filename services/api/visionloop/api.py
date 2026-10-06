@@ -22,6 +22,7 @@ async def lifespan(app):
 
 app = FastAPI(title="VisionLoop local API", lifespan=lifespan)
 _model_cache = {}
+REVIEW_THRESHOLD = 0.65
 
 
 def load_model(model_id, db):
@@ -39,13 +40,20 @@ def load_model(model_id, db):
 
 
 def image_rows(db):
-    return [dict(r) for r in db.execute('''
+    rows = [dict(r) for r in db.execute('''
         SELECT i.*, COALESCE((SELECT r.label FROM reviews r WHERE r.image_id=i.id
         ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1), i.label) AS reviewed_label,
-        (SELECT p.label FROM predictions p WHERE p.image_id=i.id ORDER BY p.created_at DESC LIMIT 1) AS predicted_label,
-        (SELECT p.model_id FROM predictions p WHERE p.image_id=i.id ORDER BY p.created_at DESC LIMIT 1) AS model_id
-        FROM images i ORDER BY i.created_at DESC
+        p.label AS predicted_label, p.model_id, p.scores AS prediction_scores
+        FROM images i LEFT JOIN predictions p ON p.rowid = (
+            SELECT latest.rowid FROM predictions latest WHERE latest.image_id=i.id
+            ORDER BY latest.created_at DESC, latest.rowid DESC LIMIT 1
+        ) ORDER BY i.created_at DESC, i.rowid DESC
     ''').fetchall()]
+    for row in rows:
+        scores = json.loads(row.pop("prediction_scores") or "[]")
+        row["prediction_score"] = next((s["score"] for s in scores if s["label"] == row["predicted_label"]), None)
+        row["low_score"] = row["prediction_score"] is not None and row["prediction_score"] < REVIEW_THRESHOLD
+    return rows
 
 
 @app.get("/health")
@@ -63,7 +71,9 @@ def overview():
         return {
             "labels": store.LABELS, "dataset": store.DATASET,
             "images": len(images), "reviewed": sum(bool(i["reviewed_label"]) for i in images),
-            "pending": sum(not i["reviewed_label"] for i in images),
+            "pending": sum(i["split"] == "train" and not i["reviewed_label"] for i in images),
+            "low_score_pending": sum(i["split"] == "train" and not i["reviewed_label"] and i["low_score"] for i in images),
+            "review_threshold": REVIEW_THRESHOLD,
             "class_counts": dict(Counter(i["reviewed_label"] for i in images if i["reviewed_label"])),
             "split_counts": dict(Counter(i["split"] for i in images if i["reviewed_label"])),
             "class_splits": {label: {split: coverage[(label, split)] for split in ("train", "validation", "test")} for label in store.LABELS},
@@ -74,9 +84,17 @@ def overview():
 
 
 @app.get("/images")
-def images():
+def images(sort: Literal["newest", "review_priority"] = "newest"):
     with store.connect() as db:
-        return image_rows(db)
+        rows = image_rows(db)
+    if sort == "review_priority":
+        # Stable sort retains newest-first order for equal scores.
+        rows.sort(key=lambda i: (
+            bool(i["reviewed_label"]) or i["split"] != "train",
+            i["prediction_score"] is None,
+            i["prediction_score"] if i["prediction_score"] is not None else 0,
+        ))
+    return rows
 
 
 @app.get("/images/{image_id}/file")
@@ -98,7 +116,8 @@ def classify_content(content, filename):
         prediction = None
         if current:
             scores = ml.predict(load_model(current, db), store.DATA / image["path"])
-            prediction = {"label": scores[0]["label"], "scores": scores, "model_id": current}
+            prediction = {"label": scores[0]["label"], "scores": scores, "model_id": current,
+                          "low_score": scores[0]["score"] < REVIEW_THRESHOLD, "review_threshold": REVIEW_THRESHOLD}
             db.execute("INSERT INTO predictions VALUES (?,?,?,?,?,?)", (uuid.uuid4().hex, image["id"], current, scores[0]["label"], json.dumps(scores), store.now()))
     return {"image": image, "prediction": prediction}
 

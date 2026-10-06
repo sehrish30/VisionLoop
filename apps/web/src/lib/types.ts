@@ -10,6 +10,7 @@ export interface Metrics {
   training_losses?: number[];
 }
 export interface Overview {
+  low_score_pending: number; review_threshold: number;
   class_splits?: Record<string, { train: number; validation: number; test: number }>;
   labels: string[]; dataset: string; images: number; reviewed: number; pending: number;
   class_counts: Record<string, number>; split_counts: Record<string, number>; runs: number;
@@ -17,9 +18,10 @@ export interface Overview {
 }
 export interface Garment {
   id: string; filename: string; source: string; label: string | null; split: string;
+  prediction_score?: number | null; low_score?: boolean;
   reviewed_label?: string | null; predicted_label?: string | null; model_id?: string | null;
 }
-export interface Prediction { label: string; model_id: string; scores: { label: string; score: number }[] }
+export interface Prediction { low_score: boolean; review_threshold: number; label: string; model_id: string; scores: { label: string; score: number }[] }
 export interface Classification { image: Garment; prediction: Prediction | null }
 export interface TrainingRun {
   trainer: Trainer;

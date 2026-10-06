@@ -201,3 +201,10 @@ td.diagonal { background:var(--violet-soft); color:var(--violet); }
 .final-test p { font-size:13px; line-height:1.6; }
 .final-test .run-metrics { margin:18px 0; }
 .final-test>a { display:inline-flex; margin-top:16px; }
+
+.review-help { color:var(--muted); font-size:12px; line-height:1.6; margin:-10px 0 22px; }
+.review-score { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:11px; margin-bottom:14px; }
+.review-score small { width:100%; color:var(--muted); overflow-wrap:anywhere; }
+.low-score-badge { color:#805714; background:#fff3d8; padding:4px 7px; border-radius:5px; font-size:10px; }
+.low-score-note { color:#805714; background:#fff3d8; padding:12px; border-radius:6px; font-size:12px; line-height:1.5; }
+.segmented { flex-wrap:wrap; }
