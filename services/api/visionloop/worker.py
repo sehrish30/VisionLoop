@@ -40,9 +40,15 @@ def execute(run):
         paths = lambda subset: [store.DATA / r["path"] for r in subset]
         labels = lambda subset: [r["label"] for r in subset]
         trainer = run.get("trainer", "baseline")
-        step = "Load pretrained transformer and train classifier" if trainer == "vit" else "Train classifier"
+        step = "Load pretrained transformer and train classifier" if trainer in ("vit", "vit_finetune") else "Train classifier"
         progress(run_id, step, 35)
-        model = ml.fit_model(paths(train), labels(train), trainer)
+        if trainer == "vit_finetune":
+            def epoch_progress(epoch, total, loss):
+                progress(run_id, f"Fine-tuning epoch {epoch}/{total} · training loss {loss:.3f}", 35 + int(25 * epoch / total))
+            model = ml.fit_model(paths(train), labels(train), trainer,
+                                 config=json.loads(run["training_config"]), on_progress=epoch_progress)
+        else:
+            model = ml.fit_model(paths(train), labels(train), trainer)
         progress(run_id, "Evaluate candidate", 65)
         metrics = ml.evaluate(model, paths(validation), labels(validation))
         metrics["training_samples"] = len(train)
@@ -58,16 +64,24 @@ def execute(run):
         metrics["gate_passed"] = eligible
         metrics["algorithm"] = ml.ALGORITHMS[trainer]
         metrics["trainer"] = trainer
-        if trainer == "vit":
+        if trainer in ("vit", "vit_finetune"):
             metrics["backbone"] = model.backbone_name
-            metrics["backbone_frozen"] = True
+            metrics["backbone_frozen"] = trainer == "vit"
+        if trainer == "vit_finetune":
+            metrics["training_config"] = model.training_config
+            metrics["training_losses"] = model.training_losses
         tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
         if tracking_uri:
             import mlflow
             mlflow.set_tracking_uri(tracking_uri)
             mlflow.set_experiment("VisionLoop")
             with mlflow.start_run(run_name=run_id):
-                mlflow.log_params({"classifier": "logistic-regression", "trainer": trainer, "dataset_snapshot": run_id, "C": 0.1})
+                params = {"classifier": "neural-linear" if trainer == "vit_finetune" else "logistic-regression", "trainer": trainer, "dataset_snapshot": run_id}
+                params.update(model.training_config if trainer == "vit_finetune" else {"C": 0.1})
+                mlflow.log_params(params)
+                if trainer == "vit_finetune":
+                    for epoch, loss in enumerate(model.training_losses, start=1):
+                        mlflow.log_metric("training_loss", loss, step=epoch)
                 mlflow.log_metrics({"accuracy": metrics["accuracy"], "macro_f1": metrics["macro_f1"]})
                 mlflow.log_artifact(str(store.DATA / run["snapshot"]))
         progress(run_id, "Save model", 95)

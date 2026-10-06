@@ -1,12 +1,13 @@
 export const labels = ["Dress", "T-shirt", "Shirt", "Sweater", "Blouse"] as const;
 export type Label = (typeof labels)[number];
 export type View = "classify" | "review" | "training" | "models";
-export type Trainer = "baseline" | "vit";
+export type Trainer = "baseline" | "vit" | "vit_finetune";
 export interface Metrics {
   accuracy: number; macro_f1: number; samples: number; training_samples?: number;
   confusion_matrix: number[][]; labels: string[]; gate_passed?: boolean;
   gate_threshold?: number; algorithm?: string;
   per_class?: { label: string; precision: number; recall: number; f1: number; samples: number }[];
+  training_losses?: number[];
 }
 export interface Overview {
   class_splits?: Record<string, { train: number; validation: number; test: number }>;

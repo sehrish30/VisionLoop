@@ -76,6 +76,8 @@ def init():
         run_columns = {r[1] for r in db.execute("PRAGMA table_info(runs)")}
         if "trainer" not in run_columns:
             db.execute("ALTER TABLE runs ADD COLUMN trainer TEXT NOT NULL DEFAULT 'baseline'")
+        if "training_config" not in run_columns:
+            db.execute("ALTER TABLE runs ADD COLUMN training_config TEXT NOT NULL DEFAULT '{}'")
         # Also recognize a re-upload of an image already normalized by this app.
         columns = {r[1] for r in db.execute("PRAGMA table_info(images)")}
         if "stored_hash" not in columns:

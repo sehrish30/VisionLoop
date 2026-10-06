@@ -133,18 +133,20 @@ def runs():
     with store.connect() as db:
         result = [dict(r) for r in db.execute("SELECT * FROM runs ORDER BY created_at DESC")]
     for r in result:
-        for name in ("metrics", "baseline_metrics"):
+        for name in ("metrics", "baseline_metrics", "training_config"):
             r[name] = json.loads(r[name]) if r[name] else None
     return result
 
 
 class TrainingInput(BaseModel):
-    trainer: Literal["baseline", "vit"] = "baseline"
+    trainer: Literal["baseline", "vit", "vit_finetune"] = "baseline"
 
 
 @app.post("/runs", status_code=202)
 def start_run(body: TrainingInput | None = None):
     trainer = body.trainer if body else "baseline"
+    from .fine_tune import DEFAULT_CONFIG
+    config = DEFAULT_CONFIG if trainer == "vit_finetune" else {}
     with store.connect() as db:
         db.execute("BEGIN IMMEDIATE")
         if db.execute("SELECT id FROM runs WHERE status IN ('queued','running')").fetchone():
@@ -157,7 +159,7 @@ def start_run(body: TrainingInput | None = None):
         snapshot = f"snapshots/{run_id}.json"
         payload = [{"id": r["id"], "path": r["path"], "hash": r["hash"], "label": r["reviewed_label"], "split": r["split"]} for r in rows if r["reviewed_label"]]
         (store.DATA / snapshot).write_text(json.dumps(payload, indent=2))
-        db.execute("INSERT INTO runs (id,status,step,created_at,snapshot,baseline_id,trainer) VALUES (?,?,?,?,?,?,?)", (run_id, "queued", "Queued", store.now(), snapshot, store.active_id(db), trainer))
+        db.execute("INSERT INTO runs (id,status,step,created_at,snapshot,baseline_id,trainer,training_config) VALUES (?,?,?,?,?,?,?,?)", (run_id, "queued", "Queued", store.now(), snapshot, store.active_id(db), trainer, json.dumps(config)))
     return {"id": run_id, "status": "queued"}
 
 

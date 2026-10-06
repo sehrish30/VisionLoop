@@ -15,6 +15,7 @@ from .store import LABELS
 ALGORITHMS = {
     "baseline": "CPU baseline · image features + logistic regression",
     "vit": "Vision Transformer · frozen DeiT-Tiny + logistic regression",
+    "vit_finetune": "Vision Transformer · fine-tuned DeiT-Tiny final block + neural classifier",
 }
 
 
@@ -30,7 +31,10 @@ def features(path):
     return np.concatenate([gray.flatten(), horizontal.mean(axis=0), vertical.mean(axis=1), *histograms])
 
 
-def fit_model(paths, labels, trainer="baseline"):
+def fit_model(paths, labels, trainer="baseline", *, config=None, on_progress=None):
+    if trainer == "vit_finetune":
+        from .fine_tune import fit
+        return fit(paths, labels, config=config, on_progress=on_progress)
     if trainer == "vit":
         from .vit import fit
         return fit(paths, labels)
@@ -42,6 +46,9 @@ def fit_model(paths, labels, trainer="baseline"):
 
 
 def model_inputs(model, paths):
+    from .fine_tune import FineTunedModel
+    if isinstance(model, FineTunedModel):
+        return model, paths
     from .vit import VisionTransformerModel
     if isinstance(model, VisionTransformerModel):
         return model.head, model.features(paths)
