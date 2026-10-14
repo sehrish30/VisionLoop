@@ -237,3 +237,11 @@ td.diagonal { background:var(--violet-soft); color:var(--violet); }
 .validation-item figcaption em { font-style:normal; float:right; font-variant-numeric:tabular-nums; }
 .show-more { margin-top:16px; }
 @media(max-width:700px) { .garment-row { grid-template-columns:80px 1fr 60px; } .garment-mixup { grid-column:1 / -1; } }
+.library-toolbar { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-bottom:26px; }
+.library-toolbar p { margin:0; font-size:12px; }
+.library-group { margin-bottom:34px; }
+.library-group>h3 { margin:0 0 6px; font-size:14px; font-weight:600; color:var(--ink); }
+.library-group>h3 span { margin-left:6px; color:var(--violet); font-weight:500; }
+.library-group>p { margin:0 0 14px; font-size:12px; }
+.library-group>h3+.model-list { margin-top:12px; }
+.model-actions { display:flex; gap:8px; align-items:center; }

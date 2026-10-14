@@ -24,7 +24,7 @@ export interface Garment {
 export interface Prediction { low_score: boolean; review_threshold: number; label: string; model_id: string; scores: { label: string; score: number }[] }
 export interface Classification { image: Garment; prediction: Prediction | null }
 export interface TrainingRun {
-  trainer: Trainer;
+  trainer: Trainer; model_id?: string | null;
   id: string; status: "queued" | "running" | "completed" | "failed"; step: string;
   progress: number; error: string | null; metrics: Metrics | null; baseline_metrics: Metrics | null;
   created_at: string; finished_at: string | null;

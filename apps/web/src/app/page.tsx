@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { TestReportPanel } from "./test-report-panel";
-import { ValidationPanel } from "./validation-panel";
+import { ModelLibrary } from "./model-library";
 import { ArrowUpRight, Check, CheckCheck, ChevronRight, CircleHelp, Database, FlaskConical, ImagePlus, Layers3, LoaderCircle, RotateCcw, ScanLine, Shirt, Sparkles, Trash2, Upload, X } from "lucide-react";
 import { api, labels, type Classification, type Garment, type ModelVersion, type Overview, type Trainer, type TrainingRun, type View } from "@/lib/types";
 
@@ -111,6 +110,23 @@ export default function Studio() {
     catch (e) { setError((e as Error).message); }
     finally { setBusy(null); }
   }
+  async function deleteModel(model: ModelVersion) {
+    const warning = model.previously_active ? " This is an earlier active version, so you won’t be able to restore it." : "";
+    if (!window.confirm(`Delete model ${model.id}? Its file, validation results and any test report are removed. The training run and its scores stay in Training runs.${warning}`)) return;
+    setBusy(model.id); setError(null);
+    try { await api(`/models/${model.id}`, { method: "DELETE" }); setNotice(`Deleted model ${model.id}.`); await refresh(); }
+    catch (e) { setError((e as Error).message); }
+    finally { setBusy(null); }
+  }
+  async function deleteFailedCandidates(count: number) {
+    if (!window.confirm(`Delete ${count} ${count === 1 ? "candidate" : "candidates"} that didn’t pass the quality gate? The active model and earlier active versions are kept. Training runs and their scores stay.`)) return;
+    setBusy("cleanup"); setError(null);
+    try {
+      const { deleted } = await api<{ deleted: string[] }>("/models/cleanup", { method: "POST" });
+      setNotice(`Deleted ${deleted.length} ${deleted.length === 1 ? "candidate" : "candidates"}.`); await refresh();
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(null); }
+  }
   async function requestTestReport(id: string) {
     setBusy(id); setError(null);
     try {
@@ -201,12 +217,12 @@ export default function Studio() {
           </div>
           <div className="training-overview"><div><Database size={22} /><span><strong>{overview?.split_counts.train ?? 0}</strong> Training images</span></div><div><CheckCheck size={22} /><span><strong>{overview?.split_counts.validation ?? 0}</strong> Validation images</span></div><div><Layers3 size={22} /><span><strong>{overview?.split_counts.test ?? 0}</strong> Reserved test images</span></div><div><span className={`status-dot ${workerReady ? "online" : ""}`} /><span>{workerReady ? "Worker ready" : "Worker offline"}<small>One run at a time</small></span></div></div>
           <div className="pipeline-steps">{["Prepare", "Train", "Evaluate", "Compare", "Save"].map((step, index) => <span key={step}><span>{index + 1}</span>{step}{index < 4 && <ChevronRight size={16} />}</span>)}</div>
-          {!runs.length ? <Empty icon={<FlaskConical size={34} />} title="Your first experiment awaits" text="Import a sample of the fashion dataset, then start a local training run. A lightweight CPU baseline keeps the first experiment small." action="View dataset setup" onAction={() => setSetupOpen(true)} /> : <div className="run-list">{runs.map(run => <article className="run-card" key={run.id}><div className="run-header"><div><h2>Run {run.id.slice(0, 6)}</h2><p>{date(run.created_at)} · {trainerNames[run.trainer] ?? "Lightweight baseline"}</p></div><span className={`status-tag ${run.status}`}>{run.status}</span></div><div className="run-progress-label"><span>{run.step}</span><span>{run.progress}%</span></div><div className="run-progress"><div style={{ width: `${run.progress}%` }} /></div>{run.error && <p className="run-error">{run.error}</p>}{run.metrics?.training_losses && <p className="muted">Training loss by epoch: {run.metrics.training_losses.map(loss => loss.toFixed(3)).join(" → ")}. Lower training loss alone does not mean better validation results.</p>}{run.metrics && <div className="run-metrics"><span>Accuracy <strong>{percent(run.metrics.accuracy)}</strong></span><span>Candidate F1 <strong>{percent(run.metrics.macro_f1)}</strong></span>{run.baseline_metrics && <span>Active model F1 · same data <strong>{percent(run.baseline_metrics.macro_f1)}</strong></span>}<span>Validation images <strong>{run.metrics.samples}</strong></span><span>Comparison <strong>{run.metrics.gate_passed ? "Passed" : "Below threshold"}</strong></span><button className="text-button" onClick={() => setView("models")}>View model <ChevronRight size={15} /></button></div>}</article>)}</div>}
+          {!runs.length ? <Empty icon={<FlaskConical size={34} />} title="Your first experiment awaits" text="Import a sample of the fashion dataset, then start a local training run. A lightweight CPU baseline keeps the first experiment small." action="View dataset setup" onAction={() => setSetupOpen(true)} /> : <div className="run-list">{runs.map(run => <article className="run-card" key={run.id}><div className="run-header"><div><h2>Run {run.id.slice(0, 6)}</h2><p>{date(run.created_at)} · {trainerNames[run.trainer] ?? "Lightweight baseline"}</p></div><span className={`status-tag ${run.status}`}>{run.status}</span></div><div className="run-progress-label"><span>{run.step}</span><span>{run.progress}%</span></div><div className="run-progress"><div style={{ width: `${run.progress}%` }} /></div>{run.error && <p className="run-error">{run.error}</p>}{run.metrics?.training_losses && <p className="muted">Training loss by epoch: {run.metrics.training_losses.map(loss => loss.toFixed(3)).join(" → ")}. Lower training loss alone does not mean better validation results.</p>}{run.metrics && <div className="run-metrics"><span>Accuracy <strong>{percent(run.metrics.accuracy)}</strong></span><span>Candidate F1 <strong>{percent(run.metrics.macro_f1)}</strong></span>{run.baseline_metrics && <span>Active model F1 · same data <strong>{percent(run.baseline_metrics.macro_f1)}</strong></span>}<span>Validation images <strong>{run.metrics.samples}</strong></span><span>Comparison <strong>{run.metrics.gate_passed ? "Passed" : "Below threshold"}</strong></span>{run.status === "completed" && !run.model_id ? <span className="muted">Model deleted</span> : <button className="text-button" onClick={() => setView("models")}>View model <ChevronRight size={15} /></button>}</div>}</article>)}</div>}
           <p className="footnote">First-model threshold: 20% macro F1. Later candidates must improve by at least 1 percentage point on the same validation snapshot. These are learning-demo rules, not a production quality guarantee.</p>
         </>}
 
         {view === "models" && <>
-          {!models.length ? <Empty icon={<Layers3 size={34} />} title="A home for every model version" text="Completed runs appear here with real evaluation results. Activate a passing candidate when you are ready to use it." action="Go to training" onAction={() => setView("training")} /> : <div className="model-list">{models.map(model => <article className={`model-card ${model.active ? "is-active" : ""}`} key={model.id}><div className="run-header"><div><div className="model-name"><h2>{model.id}</h2>{model.active && <span className="status-tag completed">Active</span>}</div><p>{model.metrics.algorithm}</p></div><button className={model.active ? "secondary" : "primary"} disabled={model.active || !model.can_activate || !!busy} onClick={() => void activate(model.id)}>{model.active ? <Check size={16} /> : model.previously_active ? <RotateCcw size={16} /> : <Sparkles size={16} />}{model.active ? "In use" : model.previously_active ? "Restore version" : "Activate model"}</button></div><div className="model-metrics"><div><span>Validation accuracy</span><strong>{percent(model.metrics.accuracy)}</strong></div><div><span>Validation macro F1</span><strong>{percent(model.metrics.macro_f1)}</strong></div><div><span>Training images</span><strong>{model.metrics.training_samples}</strong></div><div><span>Quality gate</span><strong className="gate-value">{model.eligible ? "Passed" : "Not passed"}</strong></div></div><details><summary>Inspect validation confusion matrix</summary><p className="muted">Rows are actual labels; columns are predictions. Larger diagonal values are better.</p><div className="table-scroll"><table><thead><tr><th>Actual / predicted</th>{model.metrics.labels.map(l => <th key={l}>{l}</th>)}</tr></thead><tbody>{model.metrics.confusion_matrix.map((row, i) => <tr key={i}><th>{model.metrics.labels[i]}</th>{row.map((n, j) => <td className={i === j ? "diagonal" : ""} key={j}>{n}</td>)}</tr>)}</tbody></table></div></details><ValidationPanel modelId={model.id} /><TestReportPanel model={model} busy={!!busy} onRequest={id => void requestTestReport(id)} /></article>)}</div>}
+          {!models.length ? <Empty icon={<Layers3 size={34} />} title="A home for every model version" text="Completed runs appear here with real evaluation results. Activate a passing candidate when you are ready to use it." action="Go to training" onAction={() => setView("training")} /> : <ModelLibrary models={models} busy={busy} jobRunning={queued} onActivate={id => void activate(id)} onRequestReport={id => void requestTestReport(id)} onDelete={model => void deleteModel(model)} onCleanup={count => void deleteFailedCandidates(count)} />}
         </>}
         <footer className="page-footer"><span>Built to learn. Designed to improve.</span><span>Fashion dataset by fnauman · CC BY 4.0</span></footer>
       </main>

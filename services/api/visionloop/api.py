@@ -171,7 +171,10 @@ def review(image_id: str, body: ReviewInput):
 def runs():
     with store.connect() as db:
         result = [dict(r) for r in db.execute("SELECT * FROM runs ORDER BY created_at DESC")]
+        run_models = {r["run_id"]: r["id"] for r in db.execute("SELECT id,run_id FROM models")}
     for r in result:
+        # None for a completed run means its model was deleted; the run record is kept.
+        r["model_id"] = run_models.get(r["id"])
         for name in ("metrics", "baseline_metrics", "training_config"):
             r[name] = json.loads(r[name]) if r[name] else None
     return result
@@ -293,6 +296,67 @@ def model_validation(model_id: str):
     temporary.write_text(json.dumps(result))
     temporary.replace(cache)
     return result
+
+
+def _deletion_blocker(db):
+    if db.execute("SELECT 1 FROM runs WHERE status IN ('queued','running')").fetchone():
+        return "Wait for the queued or running training run to finish before deleting models."
+    if db.execute("SELECT 1 FROM test_reports WHERE status IN ('queued','running')").fetchone():
+        return "Wait for the running test report to finish before deleting models."
+    return None
+
+
+def _remove_models(db, model_ids):
+    """Delete model rows and their reports. Returns files to remove after commit.
+
+    Training runs, activation history and saved predictions keep the model id, so the
+    experiment log and what each prediction used stay intact.
+    """
+    files = []
+    for model_id in model_ids:
+        row = db.execute("SELECT path FROM models WHERE id=?", (model_id,)).fetchone()
+        db.execute("DELETE FROM test_reports WHERE model_id=?", (model_id,))
+        db.execute("DELETE FROM models WHERE id=?", (model_id,))
+        files += [store.DATA / row["path"], store.DATA / "validation" / f"{model_id}.json"]
+    return files
+
+
+def _delete_files(files):
+    for path in files:
+        path.unlink(missing_ok=True)
+
+
+@app.delete("/models/{model_id}")
+def delete_model(model_id: str):
+    with store.connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        if not db.execute("SELECT 1 FROM models WHERE id=?", (model_id,)).fetchone():
+            raise HTTPException(404, "Model not found.")
+        if store.active_id(db) == model_id:
+            raise HTTPException(409, "This model is active. Activate another model before deleting it.")
+        if blocker := _deletion_blocker(db):
+            raise HTTPException(409, blocker)
+        files = _remove_models(db, [model_id])
+    _model_cache.pop(model_id, None)
+    _delete_files(files)
+    return {"deleted": [model_id]}
+
+
+@app.post("/models/cleanup")
+def delete_failed_candidates():
+    """Delete candidates that did not pass the gate. Never the active or an earlier active model."""
+    with store.connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        if blocker := _deletion_blocker(db):
+            raise HTTPException(409, blocker)
+        ids = [r[0] for r in db.execute(
+            "SELECT id FROM models WHERE eligible=0 AND id IS NOT ? AND id NOT IN (SELECT model_id FROM activations)",
+            (store.active_id(db),))]
+        files = _remove_models(db, ids)
+    for model_id in ids:
+        _model_cache.pop(model_id, None)
+    _delete_files(files)
+    return {"deleted": ids}
 
 
 @app.post("/models/{model_id}/activate")
