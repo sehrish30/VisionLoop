@@ -211,3 +211,6 @@ td.diagonal { background:var(--violet-soft); color:var(--violet); }
 
 .icon-button.danger { background:#fdecec; color:#a03030; }
 .icon-button.danger:hover:not(:disabled) { background:#f9d6d6; }
+.source-tag { display:inline-block; margin-top:6px; padding:3px 7px; border-radius:5px; font-size:10px; font-weight:500; }
+.source-tag.upload { background:var(--violet-soft); color:var(--violet); }
+.source-tag.dataset { background:#eaedf3; color:#5d6a80; }
