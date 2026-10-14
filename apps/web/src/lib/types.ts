@@ -49,3 +49,5 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   }
   return response.json() as Promise<T>;
 }
+export interface ValidationItem { image_id: string; label: string; predicted: string; score: number; correct: boolean }
+export interface ValidationResult { model_id: string; samples: number; correct: number; items: ValidationItem[] }

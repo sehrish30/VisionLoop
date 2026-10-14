@@ -73,6 +73,13 @@ def evaluate(model, paths, labels, include_per_class=False):
     return metrics
 
 
+def predict_labels(model, paths):
+    """Top label and score for each path, in order. Used for per-image inspection."""
+    classifier, inputs = model_inputs(model, paths)
+    probabilities = classifier.predict_proba(inputs)
+    return [{"label": str(model.classes_[row.argmax()]), "score": float(row.max())} for row in probabilities]
+
+
 def predict(model, path):
     classifier, inputs = model_inputs(model, [path])
     probabilities = classifier.predict_proba(inputs)[0]

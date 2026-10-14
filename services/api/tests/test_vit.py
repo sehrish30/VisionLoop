@@ -43,6 +43,8 @@ def test_vit_roundtrip_and_comparison(client, monkeypatch):
     assert client.get("/overview").json()["active_model"]["id"] == baseline["id"]
 
     candidate = client.get("/models").json()[0]
+    validation = client.get(f"/models/{candidate['id']}/validation").json()
+    assert validation["samples"] == 10 and len(validation["items"]) == 10
     model = joblib.load(store.DATA / candidate["path"])
     assert model._runtime is None
     image = next(i for i in client.get("/images").json() if i["split"] == "validation")

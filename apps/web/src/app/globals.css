@@ -214,3 +214,26 @@ td.diagonal { background:var(--violet-soft); color:var(--violet); }
 .source-tag { display:inline-block; margin-top:6px; padding:3px 7px; border-radius:5px; font-size:10px; font-weight:500; }
 .source-tag.upload { background:var(--violet-soft); color:var(--violet); }
 .source-tag.dataset { background:#eaedf3; color:#5d6a80; }
+.validation-panel { margin-top:16px; }
+.validation-total { font-size:13px; color:var(--ink); }
+.validation-total strong { font-weight:600; }
+.garment-breakdown { display:flex; flex-direction:column; border:1px solid var(--line); border-radius:7px; overflow:hidden; margin-bottom:18px; }
+.garment-row { display:grid; grid-template-columns:90px minmax(80px,1fr) 70px minmax(150px,1.4fr); gap:14px; align-items:center; padding:11px 14px; border:0; border-top:1px solid var(--line); background:white; text-align:left; font-size:12px; color:var(--muted); }
+.garment-row:first-child { border-top:0; }
+.garment-row:hover { background:#fafafd; }
+.garment-row.selected { background:var(--violet-soft); box-shadow:inset 3px 0 0 var(--violet); }
+.garment-name { color:var(--ink); font-weight:550; }
+.garment-bar { height:6px; border-radius:3px; background:#f3d9d9; overflow:hidden; }
+.garment-bar span { display:block; height:100%; background:var(--green); }
+.garment-count { color:var(--ink); font-variant-numeric:tabular-nums; }
+.validation-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin:0 0 14px; font-size:12px; }
+.validation-toolbar strong { color:var(--ink); font-weight:550; }
+.validation-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:10px; }
+.validation-item { margin:0; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:white; }
+.validation-item.mistake { border-color:#e9bcbc; box-shadow:inset 0 3px 0 #d98a8a; }
+.validation-item img { display:block; width:100%; height:118px; object-fit:contain; background:#f4f4f9; }
+.validation-item figcaption { display:flex; flex-direction:column; gap:3px; padding:8px 9px 9px; font-size:11px; color:var(--muted); }
+.validation-item figcaption strong { color:var(--ink); font-weight:550; }
+.validation-item figcaption em { font-style:normal; float:right; font-variant-numeric:tabular-nums; }
+.show-more { margin-top:16px; }
+@media(max-width:700px) { .garment-row { grid-template-columns:80px 1fr 60px; } .garment-mixup { grid-column:1 / -1; } }

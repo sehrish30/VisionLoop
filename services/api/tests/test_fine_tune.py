@@ -49,6 +49,8 @@ def test_fine_tuning_weights_artifact_and_workflow(client, monkeypatch):
     assert all(np.isfinite(run["metrics"]["training_losses"]))
     assert any("epoch 3/3" in step for step in recorded_steps)
     candidate = client.get("/models").json()[0]
+    validation = client.get(f"/models/{candidate['id']}/validation").json()
+    assert validation["samples"] == 10 and len(validation["items"]) == 10
     assert client.get("/overview").json()["active_model"]["id"] == baseline["id"]
     model = joblib.load(store.DATA / candidate["path"])
     assert model._runtime is None

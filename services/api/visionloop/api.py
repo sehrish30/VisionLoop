@@ -262,6 +262,39 @@ def download_test_report(model_id: str):
                     headers={"Content-Disposition": f'attachment; filename="test-report-{row["id"]}.json"'})
 
 
+@app.get("/models/{model_id}/validation")
+def model_validation(model_id: str):
+    """Per-image results on the validation images from this model's own training run.
+
+    Read-only and cached after the first request. Uses the same snapshot labels the
+    run was scored with, so the totals match the model's validation metrics.
+    """
+    with store.connect() as db:
+        row = db.execute("SELECT m.id,m.path,r.snapshot FROM models m JOIN runs r ON r.id=m.run_id WHERE m.id=?", (model_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Model not found.")
+    cache = store.DATA / "validation" / f"{row['id']}.json"
+    if cache.exists():
+        return json.loads(cache.read_text())
+    rows = [r for r in json.loads((store.DATA / row["snapshot"]).read_text()) if r["split"] == "validation"]
+    if not rows:
+        raise HTTPException(409, "This model's training snapshot has no validation images.")
+    # Reuse the active model if it is already loaded; never evict it for an inspection.
+    model = _model_cache.get(row["id"]) or joblib.load(store.DATA / row["path"])
+    try:
+        predictions = ml.predict_labels(model, [store.DATA / r["path"] for r in rows])
+    except FileNotFoundError as exc:
+        raise HTTPException(409, "Some validation image files are missing from local storage.") from exc
+    items = [{"image_id": r["id"], "label": r["label"], "predicted": p["label"], "score": p["score"],
+              "correct": p["label"] == r["label"]} for r, p in zip(rows, predictions)]
+    result = {"model_id": row["id"], "samples": len(items), "correct": sum(i["correct"] for i in items), "items": items}
+    cache.parent.mkdir(exist_ok=True)
+    temporary = cache.with_suffix(".tmp")
+    temporary.write_text(json.dumps(result))
+    temporary.replace(cache)
+    return result
+
+
 @app.post("/models/{model_id}/activate")
 def activate(model_id: str):
     with store.connect() as db:
