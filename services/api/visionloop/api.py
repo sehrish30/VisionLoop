@@ -106,6 +106,26 @@ def image_file(image_id: str):
     return FileResponse(store.DATA / row["path"], media_type="image/jpeg")
 
 
+@app.delete("/images/{image_id}")
+def delete_image(image_id: str):
+    """Remove a mistaken upload. Imported dataset and evaluation images are protected."""
+    with store.connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        image = db.execute("SELECT * FROM images WHERE id=?", (image_id,)).fetchone()
+        if not image:
+            raise HTTPException(404, "Image not found.")
+        if image["source"] != "upload" or image["split"] != "train":
+            raise HTTPException(409, "Only photos you uploaded can be deleted. Dataset and evaluation images are kept.")
+        if db.execute("SELECT 1 FROM runs WHERE status IN ('queued','running')").fetchone():
+            raise HTTPException(409, "Wait for the queued or running training run to finish before deleting images.")
+        db.execute("DELETE FROM predictions WHERE image_id=?", (image_id,))
+        db.execute("DELETE FROM reviews WHERE image_id=?", (image_id,))
+        db.execute("DELETE FROM images WHERE id=?", (image_id,))
+        path = store.DATA / image["path"]
+    path.unlink(missing_ok=True)
+    return {"deleted": True, "id": image_id}
+
+
 def classify_content(content, filename):
     try:
         image = save_image(content, filename)

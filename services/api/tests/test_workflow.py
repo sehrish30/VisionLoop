@@ -115,3 +115,30 @@ def test_unimproved_candidate_cannot_activate(client):
     assert not second["eligible"]
     assert client.post(f"/models/{second['id']}/activate").status_code == 409
     assert client.get("/overview").json()["active_model"]["id"] == first["id"]
+
+
+def test_delete_mistaken_upload_only(client):
+    seed()
+    upload = client.post("/classify", files={"file": ("oops.png", photo(0, 50), "image/png")}).json()["image"]
+    image_id = upload["id"]
+    client.post(f"/images/{image_id}/review", json={"label": "Dress"})
+    path = store.DATA / upload["path"]
+    assert path.exists()
+    # Dataset-style and evaluation images are protected.
+    imported = next(i for i in client.get("/images").json() if i["split"] == "train" and i["source"] != "upload")
+    heldout = next(i for i in client.get("/images").json() if i["split"] == "test")
+    assert client.delete(f"/images/{imported['id']}").status_code == 409
+    assert client.delete(f"/images/{heldout['id']}").status_code == 409
+    assert client.delete("/images/missing").status_code == 404
+    # A queued run may reference the image, so deletion waits.
+    client.post("/runs")
+    assert client.delete(f"/images/{image_id}").status_code == 409
+    with store.connect() as db:
+        db.execute("UPDATE runs SET status='failed'")
+    assert client.delete(f"/images/{image_id}").json()["deleted"] is True
+    assert not path.exists()
+    assert image_id not in {i["id"] for i in client.get("/images").json()}
+    assert client.get(f"/images/{image_id}/file").status_code == 404
+    # The same photo can be uploaded again afterwards.
+    again = client.post("/classify", files={"file": ("again.png", photo(0, 50), "image/png")}).json()["image"]
+    assert again["id"] != image_id

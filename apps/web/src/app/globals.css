@@ -208,3 +208,6 @@ td.diagonal { background:var(--violet-soft); color:var(--violet); }
 .low-score-badge { color:#805714; background:#fff3d8; padding:4px 7px; border-radius:5px; font-size:10px; }
 .low-score-note { color:#805714; background:#fff3d8; padding:12px; border-radius:6px; font-size:12px; line-height:1.5; }
 .segmented { flex-wrap:wrap; }
+
+.icon-button.danger { background:#fdecec; color:#a03030; }
+.icon-button.danger:hover:not(:disabled) { background:#f9d6d6; }
