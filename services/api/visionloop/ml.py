@@ -15,7 +15,7 @@ from .store import LABELS
 ALGORITHMS = {
     "baseline": "CPU baseline · image features + logistic regression",
     "vit": "Vision Transformer · frozen DeiT-Tiny + logistic regression",
-    "vit_finetune": "Vision Transformer · fine-tuned DeiT-Tiny final block + neural classifier",
+    "vit_finetune": "Vision Transformer · DeiT-Tiny final block fine-tuned from a linear-probe start",
 }
 
 

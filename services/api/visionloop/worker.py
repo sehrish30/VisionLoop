@@ -43,8 +43,9 @@ def execute(run):
         step = "Load pretrained transformer and train classifier" if trainer in ("vit", "vit_finetune") else "Train classifier"
         progress(run_id, step, 35)
         if trainer == "vit_finetune":
-            def epoch_progress(epoch, total, loss):
-                progress(run_id, f"Fine-tuning epoch {epoch}/{total} · training loss {loss:.3f}", 35 + int(25 * epoch / total))
+            def epoch_progress(epoch, total, loss, holdout):
+                progress(run_id, f"Fine-tuning epoch {epoch} of up to {total} · training loss {loss:.3f} · stopping-set loss {holdout:.3f}",
+                         35 + int(25 * epoch / total))
             model = ml.fit_model(paths(train), labels(train), trainer,
                                  config=json.loads(run["training_config"]), on_progress=epoch_progress)
         else:
@@ -70,6 +71,10 @@ def execute(run):
         if trainer == "vit_finetune":
             metrics["training_config"] = model.training_config
             metrics["training_losses"] = model.training_losses
+            # Index 0 is the linear-probe starting point, before any fine-tuning.
+            metrics["holdout_losses"] = model.holdout_losses
+            metrics["best_epoch"] = model.best_epoch
+            metrics["holdout_samples"] = model.holdout_samples
         tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
         if tracking_uri:
             import mlflow
@@ -82,6 +87,9 @@ def execute(run):
                 if trainer == "vit_finetune":
                     for epoch, loss in enumerate(model.training_losses, start=1):
                         mlflow.log_metric("training_loss", loss, step=epoch)
+                    for epoch, loss in enumerate(model.holdout_losses):
+                        mlflow.log_metric("stopping_set_loss", loss, step=epoch)
+                    mlflow.log_metric("best_epoch", model.best_epoch)
                 mlflow.log_metrics({"accuracy": metrics["accuracy"], "macro_f1": metrics["macro_f1"]})
                 mlflow.log_artifact(str(store.DATA / run["snapshot"]))
         progress(run_id, "Save model", 95)

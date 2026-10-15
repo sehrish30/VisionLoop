@@ -7,7 +7,7 @@ export interface Metrics {
   confusion_matrix: number[][]; labels: string[]; gate_passed?: boolean;
   gate_threshold?: number; algorithm?: string;
   per_class?: { label: string; precision: number; recall: number; f1: number; samples: number }[];
-  training_losses?: number[];
+  training_losses?: number[]; holdout_losses?: number[]; best_epoch?: number; holdout_samples?: number;
 }
 export interface Overview {
   low_score_pending: number; review_threshold: number;
